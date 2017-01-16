@@ -1,0 +1,26 @@
+{
+  "name": "portfolio",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.html",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rohankhanna/portfolio.git"
+  },
+  "keywords": [
+    "portfolio",
+    "GridStyleSheets"
+  ],
+  "author": "Rohan Khanna",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/rohankhanna/portfolio/issues"
+  },
+  "homepage": "https://github.com/rohankhanna/portfolio#readme",
+  "dependencies": {
+    "gss-engine": "^2.0.0"
+  }
+}

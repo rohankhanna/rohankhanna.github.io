@@ -1,0 +1,72 @@
+
+flex-gap >= $sgap * 2 !require;
+radius == 10 !require;
+
+/* elements */
+#profile-card {
+  width: == ::window[width] - 120;
+  height: == ::window[height] - 350;
+  center-x: == ::window[center-x];
+  center-y: == ::window[center-y];
+  border-radius: == $outer-radius;
+}
+
+#avatar {
+  height: == 160 !require;
+  width: == &[height];
+  border-radius: 50%;
+}
+
+#name {
+  height: == &[intrinsic-height] !require;
+  width: == &[intrinsic-width] !require;
+}
+
+#cover {
+  border-radius: == [radius];
+}
+
+button {
+  width: == &[intrinsic-width] !require;
+  height: == &[intrinsic-height] !require;
+  padding: == $sgap;
+  padding-top: == $sgap / 2;
+  padding-bottom: == $sgap / 2;
+  border-radius: == radius;
+}
+
+
+@h |-(#name)-| in(#cover) gap(name-gap);
+
+@if #profile-card[width] >= #profile-card[height] {
+
+  @v |-(#avatar)-(#name)-| in(#cover) gap($sgap) outer-gap(flex-gap) {
+      center-x: == ($ #cover)[center-x];
+  }
+
+  @h |-10-(#cover)-10-| in(#profile-card);
+
+  @v |-(#cover)-(#follow)-| in(#profile-card) gap($sgap) !require;
+
+  #follow[center-x] == #profile-card[center-x];
+
+  @h |-(#message)~-~(#follow)~-~(#following)-(#followers)-|
+    in(#profile-card)
+    gap($sgap)
+    !strong {
+      &[top] == &:next[top];
+    }
+  }
+  /* portrait profile-card */
+  @else {
+
+    @v |-(#avatar)-(#name)-(#follow)-(#message)-(#following)-(#followers)-|
+      in(#cover)
+      gap($sgap)
+      outer-gap(flex-gap) !strong {
+        center-x: == ($ #profile-card)[center-x];
+    }
+
+    @h |-10-(#cover)-10-| in(#profile-card) !strong;
+    @v |-10-(#cover)-10-| in(#profile-card);
+  }
