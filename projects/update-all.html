@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>update-all — Rohan Khanna</title>
+<meta name="description" content="update-all updates your workstation by default and only reports the risky updates until you ask.">
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+<header>
+  <nav><a href="../index.html">All projects</a><a href="https://github.com/rohankhanna">GitHub</a></nav>
+</header>
+<h1>update-all</h1>
+<p class="lede">update-all updates your workstation by default and only reports the risky updates until you ask.</p>
+<p><a href="https://github.com/rohankhanna/update-all">Repository on GitHub</a></p>
+<h2>The problem</h2>
+<p>Updating a workstation is three different jobs wearing one hat.</p>
+<p>Package-manager upgrades are routine. Firmware updates and runtime bumps are
+risky and want a human present. Global tool upgrades sit in between and are
+frequently the thing that breaks a working setup.</p>
+<p>Most updaters present all of these as one action behind one switch, so the
+choice is between running everything with a flag you did not understand and
+running nothing at all. Neither is a policy.</p>
+<p>The second problem is coverage. Nobody can say, without running something, what
+on the machine is actually updatable. A tool that updates four package managers
+and says nothing about the rest of the machine reads like a tool that covers
+the machine.</p>
+<p>One command that updates everything is not the novel part, and the pitch
+should not claim it. RepoRover already advertises &quot;update all your Linux
+package managers in one place&quot;
+(https://www.youtube.com/shorts/lh-092vOG6Q), and Topgrade &quot;automatically
+discovers what package managers, language toolchains, and tools are installed
+and runs the appropriate update command for each&quot;
+(https://rustutils.com/tools/topgrade). The ground this project occupies is
+narrower: which updates are applied without a human present, which are only
+reported, and where the coverage stops.</p>
+
+<h2>cares</h2>
+<ul>
+<li><strong>Operators who keep several machines in a known state</strong> and want the routine
+part to be genuinely routine. The question they ask is asked in public, on
+Ask Ubuntu (https://askubuntu.com/questions/733434/one-single-command-to-update-everything-in-ubuntu),
+on the Linux Mint forums
+(https://forums.linuxmint.com/viewtopic.php?t=423991), on Superuser
+(https://superuser.com/questions/31096/what-linux-distribution-has-the-most-up-to-date-packages)
+and in the Apple forums (https://discussions.apple.com/thread/253125686).</li>
+<li><strong>People who have been broken by an unattended runtime upgrade</strong> and now want
+a tool that refuses to do that by default. They gather in the same
+question threads, and in Hacker News threads about update policy.</li>
+<li><strong>People who want to know what they are missing.</strong> The inventory mode is for
+the operator who cannot answer &quot;what is out of date on this box&quot; without
+guessing.</li>
+<li><strong>Makers of unattended and workstation images</strong> who need a non-interactive
+command with a machine-readable exit status. They gather in r/devops, in the
+source distribution and container communities, and on Hacker News.</li>
+</ul>
+
+<h2>t it does</h2>
+<p><code>update-all</code> is an operating-system-agnostic workstation update orchestrator.
+Safe package-manager updates run by default. Firmware, runtime bumps and
+global pip upgrades are reported without changing the machine unless their
+flags are supplied. There is no single flag that means &quot;update everything&quot;:
+each lane flag opts its own lane into apply mode.</p>
+<p>The supported paths are Linux — Debian and Ubuntu, Fedora and RHEL, Arch,
+openSUSE, Alpine, Void and Gentoo — plus macOS, and detection-only Windows
+shells, with Windows itself deferred. Cross-cutting managers are used only
+when they are present.</p>
+<p>Topgrade is the primary driver when it is installed and healthy. The
+maintained Bash-native dispatch is a complete first-class fallback covering the
+same manager families, so no optional dependency is load-bearing: if Topgrade
+disappears or becomes unmaintained, the fallback still works.</p>
+<p>The manager families the inventory audit knows about are apt, dnf, pacman,
+zypper, apk, xbps, brew, mas, snap, flatpak, pipx, npm, cargo, mise, mise-self,
+uv-tool, uv-python, uv-self and pip.</p>
+<p>Three modes matter to an operator:</p>
+<ul>
+<li><code>--dry-run</code> previews the exact commands.</li>
+<li><code>--inventory</code> prints a coverage audit of discovered software channels and
+executables before updating; <code>--inventory-only</code> runs that audit and exits
+without changing the machine.</li>
+<li><code>--inventory-json</code> prints the same audit as machine-readable JSON to stdout
+and exits, or with a path it writes the snapshot atomically, rotates the prior
+snapshot, keeps a change-detection index, and prints a summary diffing the
+current snapshot against the last run. The export is pure Bash, never
+executes an arbitrary swept binary, and does not depend on a Python
+interpreter.</li>
+</ul>
+<p>Inventory entries are classified as <code>apply</code> (this command updates them),
+<code>report</code> (this command can only inspect or flag them) or <code>manual</code> (no
+trustworthy automated updater is wired in yet). The classification is honest
+about ownership: a pipx virtual-environment shim is owned by pipx, a uv tool
+shim by uv, a standalone uv binary by uv itself, a mise shim by mise, a
+cargo-installed tool by cargo — cargo upgrades are reported and never applied,
+because cargo has no first-party per-crate updater — and a symlink into a git
+working tree is developer tooling tracked by its repository, not a manual
+update gap.</p>
+<p>The trusted set of self-updating AI command-line tools is a small registry in
+the script, currently Codex, Claude, Hermes and Goose; adding a future one is
+one registry line. Tools not in the registry are never auto-run or auto-updated,
+and the inventory flags names that look like these tools as manual gaps so the
+operator can decide.</p>
+<p>Every manager is isolated: one failure is reported and does not abort later
+steps. The command ends with a loud reboot and restart status summary, and
+the exit status is a stable contract — 0 for complete, 1 for an incomplete run
+with a failed apply step, 2 for invalid arguments, 3 for privilege required but
+unobtainable. The end-of-run summary also prints machine-greppable lines such
+as <code>apply failures=N report failures=N (total=N)</code> and either
+<code>RESULT: update complete</code> or <code>RESULT: update incomplete</code>. It is non-interactive
+by design, so it can be driven from an external orchestrator or a CI runner.</p>
+<p>Root-tier steps — native package managers, snap refresh, firmware — escalate
+through sudo; user-tier steps run as the invoking user, so nothing installs
+into the wrong home directory. No systemd timer is installed; operation is
+manual by design.</p>
+
+<h2>t it does not do</h2>
+<ul>
+<li>It does not update everything by default. Firmware, mise runtime upgrades,
+mise self-update, uv tool upgrades, uv Python upgrades, uv self-update, the
+trusted AI command-line tools, and global pip are reported only unless their
+flags are supplied. Global pip updates are always report-only.</li>
+<li><code>--full</code> does not mean &quot;everything&quot;. It widens only the distribution's
+native upgrade mode, for example <code>apt dist-upgrade</code> instead of <code>apt upgrade</code>.
+It does not apply any other lane; flags are combined to include them.</li>
+<li>It does not update cargo-installed tools. Cargo owns them, and there is no
+first-party per-crate updater that is trusted by default.</li>
+<li>It does not guess update commands for unknown binaries. A name that looks like
+an AI command-line tool but is not in the registry is surfaced as a manual
+gap, not acted on.</li>
+<li>It does not update every GUI application, AppImage, vendor installer or
+standalone binary in a directory. Package-manager coverage does not imply
+that, and the inventory mode exists to make the gap loud.</li>
+<li>It does not manage operating system upgrades as such, and it does not
+install software you did not ask about.</li>
+<li>Windows is detection only and deferred.</li>
+<li>It does not install a timer or schedule anything.</li>
+</ul>
+
+<h2>of artifact to capture</h2>
+<p>The <code>--inventory-json</code> output on a real machine, rendered as a table: one row
+per discovered channel and executable, each classified <code>apply</code>, <code>report</code> or
+<code>manual</code>, with the note explaining why. Beside it, the <code>== summary ==</code> block
+and the <code>RESULT:</code> line.</p>
+<p>That pairing is the argument. The first artifact shows what the tool can and
+cannot cover, including the gaps; the second shows the exit-status contract
+that lets a caller act on the result without parsing prose.</p>
+
+<h2>tall, in one line</h2>
+<pre><code class="language-bash">git clone https://github.com/rohankhanna/update-all.git &amp;&amp; cd update-all &amp;&amp; ./update-all --dry-run
+</code></pre>
+<p>The dry run is also the best demonstration of the design, because it shows the
+exact boundary between the safe default and the guarded operations.</p>
+
+<h2>re to post, in order</h2>
+<p>The scan found no forum community that wants a launch announcement. On the
+forums the update question is asked as a question, so the post there is an
+answer to an existing thread, and it stays attached to it.</p>
+<ol>
+<li><strong>Ask Ubuntu.</strong> The question is already there — &quot;one single command to
+update everything in ubuntu&quot;
+(https://askubuntu.com/questions/733434/one-single-command-to-update-everything-in-ubuntu).
+Answer it with the tool and its boundary: what applies by default, what is
+reported, and what the tool cannot cover.</li>
+<li><strong>The Linux Mint forums, Superuser and the Apple forums.</strong> The same shape of
+question in three more places
+(https://forums.linuxmint.com/viewtopic.php?t=423991,
+https://superuser.com/questions/31096/what-linux-distribution-has-the-most-up-to-date-packages,
+https://discussions.apple.com/thread/253125686). One answer each, with
+the coverage audit attached rather than described.</li>
+<li><strong>Hacker News, as a show.</strong> It wants the design decision and the honest
+coverage table, and it punishes announcement tone.</li>
+<li><strong>Lobsters.</strong> Short and technical: the Bash-native fallback that survives
+its own primary driver going unmaintained, and the exit-status contract.</li>
+<li><strong>r/commandline.</strong> The inventory output is the visual that carries it there.</li>
+<li><strong>Dev.to.</strong> A piece on why &quot;reporting&quot; and &quot;applying&quot; should be different
+verbs, with the classification scheme as the case study.</li>
+<li><strong>Distribution and directory surfaces afterwards:</strong> the package manager and
+self-hosted tool directories, and the community lists of workstation
+maintenance scripts. They compound, and they want a project that already has
+a working public repository and a documented coverage boundary.</li>
+</ol>
+
+<h2>three hardest questions</h2>
+<p><strong>&quot;Why not just use Topgrade?&quot;</strong>
+Because Topgrade is genuinely good at the thing its name suggests. It
+&quot;automatically discovers what package managers, language toolchains, and tools
+are installed and runs the appropriate update command for each&quot;
+(https://rustutils.com/tools/topgrade), and that source lists cargo, rustup,
+go, composer, conda, npm, gem and pip among its systems. Several of those are
+lanes this tool reports rather than applies — cargo, because cargo has no
+first-party per-crate updater, and global pip, which is always report-only — so
+the coverage argument does not hold. This tool uses Topgrade as its primary
+driver when it is installed and healthy.</p>
+<p>The difference is the split between applying and reporting, and the inventory
+audit. The default run applies only safe native package-manager upgrades and
+reports every other lane; each lane flag opts its own lane into apply mode,
+and there is no flag that means &quot;update everything&quot;. <code>--inventory</code> then prints
+every discovered software channel and executable and classifies it as <code>apply</code>,
+<code>report</code> or <code>manual</code>, gaps included, so the coverage claim is checkable
+instead of asserted.</p>
+<p><strong>&quot;What happens when Topgrade goes away, or when it breaks?&quot;</strong>
+Nothing essential stops working. The Bash-native dispatch is the permanent
+survival implementation, not a degraded stub, and it is kept in sync as
+supported managers and safety rules evolve. It covers the same manager
+families. No optional dependency is load-bearing.</p>
+<p><strong>&quot;Does it need root, and what happens if it cannot get it?&quot;</strong>
+Root-tier steps — native package managers, snap refresh, firmware — escalate
+through sudo, and the password prompt is the only interactive point. User-tier
+steps always run as the invoking user, even when the script itself is run
+under sudo, so nothing installs into the wrong home directory. If sudo is
+unavailable and the script is not root, it prints a clear message and exits
+with status 3, which is deliberately distinct from status 1 so a caller can
+retry with elevation instead of treating it as a review-required failure.</p>
+
+<h2>e ready before posting</h2>
+<ul>
+<li>The inventory table from a machine with a mix of package managers, showing
+<code>apply</code>, <code>report</code> and <code>manual</code> rows side by side.</li>
+<li>A dry-run transcript showing the exact commands that would run.</li>
+<li>The <code>== summary ==</code> block and the four exit statuses, with a one-line
+statement of what a caller should do with each.</li>
+<li>The <code>LLM_CLI_REGISTRY</code> lines, so the &quot;one registry line to add a tool&quot; claim
+is checkable by the reader.</li>
+<li>The supported platform list and the manager families list, printed as they
+appear, including the Windows deferral.</li>
+</ul>
+
+<footer>Built from the same text as the launch copy. Sources and status are on GitHub.</footer>
+</main>
+</body>
+</html>

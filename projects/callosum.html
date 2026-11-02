@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>callosum — Rohan Khanna</title>
+<meta name="description" content="Callosum records every model request it routes — backend, status, token counts and quota meters before and after — in a local SQLite log.">
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+<header>
+  <nav><a href="../index.html">All projects</a><a href="https://github.com/rohankhanna">GitHub</a></nav>
+</header>
+<h1>callosum</h1>
+<p class="lede">Callosum records every model request it routes — backend, status, token counts and quota meters before and after — in a local SQLite log.</p>
+<p><a href="https://github.com/rohankhanna/callosum">Repository on GitHub</a></p>
+<h2>The problem</h2>
+<p>You run more than one model backend. A local model for work that must not leave
+the machine, a hosted one for work that needs more capability, a cheaper one for
+bulk work. Now every call needs a decision: which one answers this?</p>
+<p>In practice that decision does not live in one place. It lives in whichever tool
+you happened to be in, encoded as a different base URL, a different model name, a
+different flag. Every caller decides differently, the decision is invisible
+afterwards, and nobody can answer the question that matters a month later: which
+backend actually answered, and what it cost.</p>
+<p>There are routing products, and they are good. LiteLLM
+(https://www.getmaxim.ai/articles/top-5-open-source-ai-gateways-for-self-hosted-llm-deployments),
+Portkey (https://www.ayautomate.com/blog/open-source-llm-orchestration-tools),
+OpenRouter (https://openrouter.ai), Bifrost
+(https://www.getmaxim.ai/articles/top-5-llm-gateways-with-an-openai-compatible-api-in-2026),
+the MLflow AI Gateway (https://mlflow.org/litellm-alternative), Routerly
+(https://github.com/Inebrio/Routerly), LLMRouter
+(https://github.com/ulab-uiuc/LLMRouter), RouteLLM
+(https://github.com/lm-sys/routellm), Relay
+(https://news.ycombinator.com/item?id=49800187), LunarGate
+(https://news.ycombinator.com/item?id=47426651), Any-LLM
+(https://news.ycombinator.com/item?id=44650567), cascadeflow
+(https://cascadeflow.ai/vs/model-routers), agentgateway
+(https://agentgateway.dev/blog/2026-02-09-getting-started-agentgateway-llm-routing)
+and Kong (https://developer.konghq.com/cookbooks/basic-llm-routing) all
+route requests to a model backend, and several of them have already claimed
+the local ground. Routerly's own description says: &quot;LiteLLM is self-hosted but
+requires standing up and maintaining a database just to run. Routerly is
+self-hosted, zero-dependency, and your data never leaves your machine.&quot;
+(https://github.com/Inebrio/Routerly).</p>
+<p>So the routing is not the difference; it is the commodity. The defensible
+difference is the record: a per-attempt log of what was sent, where it went,
+what came back, what it cost in tokens, and what the quota meters read before
+and after, plus per-model latency estimates so the choice can be argued with
+afterwards. A hosted, multi-tenant gateway does not give you that for one
+person on one machine, and neither does a router that only decides and
+forgets.</p>
+
+<h2>cares</h2>
+<ul>
+<li><strong>People running local models on their own hardware.</strong> They gather in
+r/LocalLLaMA, in the local language model communities on Hacker News and
+Lobsters, and in the selfhosted communities.</li>
+<li><strong>Operators who want one OpenAI-compatible endpoint</strong> in front of
+heterogeneous backends so that the tools they already use — the OpenAI
+software development kits, curl, editor assistants — keep working unchanged.
+They gather on Hacker News and in the command-line and selfhosted subreddits.</li>
+<li><strong>People who care about the record.</strong> Anyone who has wondered what the week's
+requests actually consumed, and which endpoint served them. This is the
+group the project is built for; the routing is the mechanism that produces
+the record.</li>
+<li><strong>Selfhosted-first operators</strong> who will not put a key in a hosted router
+because a hosted router is somebody else's account and somebody else's
+database. They gather in r/selfhosted and r/commandline.</li>
+</ul>
+<p>Model routing is a crowded category, and it is worth being blunt about that:
+LiteLLM
+(https://www.getmaxim.ai/articles/top-5-open-source-ai-gateways-for-self-hosted-llm-deployments),
+Portkey (https://www.ayautomate.com/blog/open-source-llm-orchestration-tools),
+OpenRouter (https://openrouter.ai), Bifrost
+(https://www.getmaxim.ai/articles/top-5-llm-gateways-with-an-openai-compatible-api-in-2026),
+the MLflow AI Gateway (https://mlflow.org/litellm-alternative), Routerly
+(https://github.com/Inebrio/Routerly), LLMRouter
+(https://github.com/ulab-uiuc/LLMRouter), RouteLLM
+(https://github.com/lm-sys/routellm), Relay
+(https://news.ycombinator.com/item?id=49800187), LunarGate
+(https://news.ycombinator.com/item?id=47426651), Any-LLM
+(https://news.ycombinator.com/item?id=44650567), cascadeflow
+(https://cascadeflow.ai/vs/model-routers), agentgateway
+(https://agentgateway.dev/blog/2026-02-09-getting-started-agentgateway-llm-routing)
+and Kong (https://developer.konghq.com/cookbooks/basic-llm-routing) all route requests, and two competitors have already
+claimed the &quot;self-hosted, zero-dependency, your data never leaves your
+machine&quot; ground. The framing that reaches a real audience is the narrow one —
+a single operator, one machine, no account, no key leaving the box, and a log
+on disk that says what each attempt cost. The broad framing, &quot;a smarter router
+for everyone&quot;, reaches nobody new.</p>
+
+<h2>t it does</h2>
+<p>Callosum is a local, adaptive HTTP routing layer for OpenAI-compatible model
+backends. It accepts <code>/v1/responses</code> and <code>/v1/chat/completions</code> requests,
+chooses the best available backend for each request, and forwards the call
+transparently. Any OpenAI-compatible client can point at it, by setting a base
+URL and a bearer token.</p>
+<p>For each request the routing pipeline:</p>
+<ol>
+<li>Drops backends that do not advertise the requested model.</li>
+<li>Drops unavailable backends and backends in cooldown.</li>
+<li>Drops backends whose quota is exhausted.</li>
+<li>Ranks the remaining candidates by predicted cost and quality.</li>
+<li>Selects the best available backend and retries on retryable failures.</li>
+</ol>
+<p>If no backend can serve the request, the response is a self-diagnosing error
+that carries cooldown, quota and recovery information.</p>
+<p>Clients can use concrete model identifiers, or the virtual model names <code>auto</code>
+and <code>auto-learning</code> to reach the adaptive router. Selector identifiers are
+also available, such as <code>callosum:local-only</code>, <code>callosum:remote-only</code>, and
+<code>callosum:remote/model-id::high</code>, where <code>::</code> is the explicit reasoning-effort
+delimiter. Reasoning effort is passed through unchanged when the upstream
+supports it.</p>
+<p>Backends are configured in a single TOML file. Public builds support the
+<code>codex_gateway</code> backend type. Three backends register themselves when their
+condition is met rather than through configuration: a local lane, registered
+when the <code>local-llm</code> command-line tool is available; Ollama Cloud, registered
+when <code>CALLOSUM_OLLAMA_CLOUD_ENABLED=1</code>; and OpenRouter, registered when
+<code>CALLOSUM_OPENROUTER_ENABLED=1</code>.</p>
+<p>The request log is a SQLite database. When a usage log path is configured,
+each backend attempt is recorded, and the useful columns are <code>backend_id</code>,
+<code>model</code>, <code>reasoning_effort</code>, <code>status</code>, <code>classification</code>, <code>prompt_tokens</code>,
+<code>completion_tokens</code>, <code>total_tokens</code>, <code>five_hourly_used_percent_before</code>,
+<code>five_hourly_used_percent_after</code>, <code>weekly_used_percent_before</code> and
+<code>weekly_used_percent_after</code>. With <code>capture_bodies</code> set to true, the compressed
+request and response payloads are stored as well. It is a record of what was
+sent, where it went, and what came back — not a full analytics product.</p>
+<p>The operator surface is small: <code>GET /status</code> for the backend pool, cooldowns,
+pin state and session bindings; <code>POST /control/pin</code> and <code>POST /control/unpin</code>
+to force or release routing to one backend; <code>GET /diagnose/upstream</code> for an
+upstream health check that inspects HTTP status, quota headers, the Responses
+API terminal event and the usage block; <code>GET /v1/usage</code> for an empirical
+per-model, per-reasoning-effort quota rate table with five-hourly and weekly
+meters reported independently; and <code>POST /v1/eta</code> for approximate pre-flight
+latency ranges per compatible cell. A session can be pinned to a backend by
+sending the <code>X-Codex-Session-Id</code> header, though those bindings are
+process-local and do not survive restarts.</p>
+
+<h2>t it does not do</h2>
+<p>This list is the point of the project, so it goes in the post as well.</p>
+<ul>
+<li>It is not a hosted gateway. It binds to <code>127.0.0.1</code> and is meant to stay
+there unless you add transport security and authentication yourself.</li>
+<li>It is not a multi-tenant service. The public README says so directly, and
+the configuration ships one authentication database with users, sessions and
+API keys for a single operator, not a customer model.</li>
+<li>It is not a company cost-control product. It does not do budgets, chargeback,
+invoicing or per-team metering.</li>
+<li>It does not bypass provider authentication or quota enforcement. It is a
+routing proxy, and it says so in its terms of service.</li>
+<li>It does not guarantee the best model for a task. It ranks candidates by
+predicted cost and quality against the backends you configured, and the
+prediction is a prediction.</li>
+<li>It does not replace your provider accounts. You still hold the keys, and the
+upstream quotas still apply to you.</li>
+</ul>
+
+<h2>of artifact to capture</h2>
+<p>The request log table. One terminal view showing recent requests with the
+backend that served each one, the model, the reasoning effort, the status, the
+token counts, and the five-hourly and weekly usage percentages before and
+after. That table is the argument: it turns &quot;the machine chose&quot; into a record
+you can read.</p>
+<p>The second artifact, worth having ready, is the <code>GET /status</code> output showing
+the backend pool with cooldowns and pin state next to a single line from the
+request log naming the backend that answered.</p>
+
+<h2>tall, in one line</h2>
+<pre><code class="language-bash">uv sync &amp;&amp; uv run python -m callosum
+</code></pre>
+<p>Before the first run, create <code>~/.config/callosum/config.toml</code> with a server
+block, a state directory, and at least one <code>[[backends]]</code> entry, then check the
+server with <code>curl -s http://127.0.0.1:8765/health</code>.</p>
+
+<h2>re to post, in order</h2>
+<ol>
+<li><strong>Hacker News, as a show.</strong> It wants the mechanism and the boundary, and it
+dislikes launch announcements. Lead with &quot;a local router that logs what it
+chose and why&quot;, not with a product name.</li>
+<li><strong>r/LocalLLaMA.</strong> The audience is already running local models and already
+has the &quot;which model do I use&quot; problem in a concrete form. Lead with the
+local-plus-hosted mixing case and the routing output.</li>
+<li><strong>Lobsters.</strong> It wants a technical write-up with real endpoints and real
+configuration. The routing pipeline and the request-log schema are the
+material.</li>
+<li><strong>r/selfhosted.</strong> It wants no account, no key leaving the machine, and no
+service to sign up for. That is exactly the boundary this project holds.</li>
+<li><strong>r/commandline.</strong> It wants the one-line install and a real workflow. A
+local router that any OpenAI-compatible tool can point at fits.</li>
+<li><strong>Dev.to.</strong> A long-form piece on the routing rules and the request log
+carries it further than a link post.</li>
+<li><strong>Distribution surfaces afterwards:</strong> the GitHub topic pages for local
+language models, self-hosted software and OpenAI-compatible tooling, and the
+community lists that curate local model tools and OpenAI-compatible
+proxies. Those are slow, compounding channels, not launch channels — they
+belong after the discussion has produced something to point at.</li>
+</ol>
+
+<h2>three hardest questions</h2>
+<p><strong>&quot;There is already an open source gateway that does routing. What does this
+add?&quot;</strong>
+There are several, among them LiteLLM
+(https://www.getmaxim.ai/articles/top-5-open-source-ai-gateways-for-self-hosted-llm-deployments)
+and Routerly (https://github.com/Inebrio/Routerly). The public README
+positions Callosum around a specific case: one operator, one
+machine, a local model and a hosted model both available. Where a general
+gateway assumes many clients and many credentials, this is one local process
+with one configuration file, one local authentication database, and a local
+request log that records the choice on disk. It is also worth being direct
+that routing quality is the same open problem for everyone; the difference is
+the surface area you have to adopt.</p>
+<p><strong>&quot;How do I know the router picked well?&quot;</strong>
+You do not get that from a marketing claim, you get it from the log. The
+request log records, per attempt, the backend, the model, the reasoning effort,
+the status, the classification, token counts and the quota percentages before
+and after. <code>GET /v1/usage</code> reports empirical per-model, per-reasoning-effort
+rates with five-hourly and weekly meters kept separate, and <code>POST /v1/eta</code>
+gives approximate pre-flight latency ranges per compatible cell, returning
+<code>available: false</code> when there is not enough data rather than guessing.</p>
+<p><strong>&quot;What happens when it picks wrong, or when the upstream is broken?&quot;</strong>
+Backends that are unavailable, in cooldown, or out of quota are dropped before
+selection. Retryable failures are retried on the selected backend. If no
+backend can serve the request, the error is self-diagnosing and carries
+cooldown, quota and recovery information. For an operator who needs certainty
+rather than adaptation, <code>POST /control/pin</code> forces all routing to one backend
+and <code>POST /control/unpin</code> releases it.</p>
+<p>Two operational notes from the public documentation are worth repeating rather
+than hiding: use one worker, because the SQLite databases are not safe across
+multiple workers; and <code>capture_bodies = true</code> stores sensitive prompt and
+response data, so the request log should be treated as sensitive and archived
+by hand.</p>
+
+<h2>e ready before posting</h2>
+<ul>
+<li>A screen capture of the request log table on a real machine, with the column
+names visible, since it is the artifact the whole pitch rests on.</li>
+<li>The health check output and the <code>GET /status</code> output, so the small operator
+surface is visible rather than described.</li>
+<li>The full <code>~/.config/callosum/config.toml</code> you actually use, with keys
+removed, showing one <code>[[backends]]</code> entry.</li>
+<li>The three environment variables that register the programmatic backends, and
+a plain statement of when each one applies.</li>
+<li>A short answer on the database of record: what is written, where it lives,
+what <code>capture_bodies</code> adds, and how to archive it.</li>
+</ul>
+
+<footer>Built from the same text as the launch copy. Sources and status are on GitHub.</footer>
+</main>
+</body>
+</html>

@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>posture — Rohan Khanna</title>
+<meta name="description" content="posture assesses a device's security posture and marks what it could not assess.">
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+<header>
+  <nav><a href="../index.html">All projects</a><a href="https://github.com/rohankhanna">GitHub</a></nav>
+</header>
+<h1>posture</h1>
+<p class="lede">posture assesses a device's security posture and marks what it could not assess.</p>
+<p><a href="https://github.com/rohankhanna/posture">Repository on GitHub</a></p>
+<h2>The problem</h2>
+<p>Every vulnerability scanner answers the same narrow question: which known
+Common Vulnerabilities and Exposures match this machine? That is a real
+question, and it is one dimension out of six. The other five are the ones
+that actually decide whether a device is in trouble: how it is configured,
+what is reachable from the network, what is installed, what is being exploited
+in the wild right now, and whether what is installed can be trusted at all.</p>
+<p>The crowded ground is defect matching, and posture does not compete there.
+Grype and Trivy are compared against each other constantly
+(https://devsecops.ae/trivy-vs-grype), OpenVAS sits in the same
+vulnerability-scanning field
+(https://www.cycognito.com/learn/vulnerability-assessment/vulnerability-scanning-tools),
+and DefectDojo and Prowler are the aggregation and cloud-posture tools that a
+recent comparison of the open-source tools lists side by side
+(https://defectdojo.com/blog/top-11-open-source-vulnerability-management-tools-for-2026).
+posture does not match defects and does not try to. It is a verdict engine: it
+refuses to score an axis it did not examine. None of those tools produces a
+verdict for an axis it did not examine — they emit findings, so an area they
+never looked at comes back as silence, and silence reads the same as a clean
+result.</p>
+<p>The uncomfortable part is what happens when a scanner cannot answer. Most
+tools report zero findings for a dimension they never looked at, and zero
+findings reads exactly like a clean bill of health. posture takes the opposite
+position: a dimension with no evidence is a loud <code>UNKNOWN</code>, never a silent
+&quot;clean&quot;.</p>
+<p>The project draws this from the map-and-territory distinction. The public
+catalog of defects, advisories and known-exploited vulnerabilities, drawn by
+outside authorities, is the map. Your device, with its real installed versions
+and its real configuration, is the territory. posture assesses the territory
+using the map and refuses to pretend the map is the territory. A clean result
+means the map places nothing here, not that the device is invulnerable. Unmapped
+territory — unreported bugs, software with no Common Platform Enumeration
+identifier, firmware the National Vulnerability Database never scored — has no
+coordinates and is reported as <code>UNKNOWN</code>, not as safe.</p>
+
+<h2>cares</h2>
+<ul>
+<li><strong>Security engineers</strong> who want a provenance-aware picture of a host, with
+missing evidence surfaced rather than papered over. They gather on Hacker News, on the
+<code>r/cybersecurity</code> and <code>r/sysadmin</code> subreddits, and in the security
+engineering Slack and Discord communities.</li>
+<li><strong>Fleet and portfolio tooling</strong> teams that need device-specific assessment
+to stay local while consuming one shared, signed catalog of public defect
+data. They gather on Lobsters, on infrastructure mailing lists, and in
+platform-engineering communities.</li>
+<li><strong>Downstream tool builders</strong> who want the catalog ingestion and the
+assessment engine as a Python library. They gather on PyPI-adjacent
+developer blogs, on Dev.to, and in the project issue tracker.</li>
+</ul>
+
+<h2>t it does</h2>
+<ul>
+<li>Assesses six dimensions of a host: known defects (<code>vulnerability</code>),
+misconfiguration (<code>configuration</code>), network reachability (<code>exposure</code>), what
+is installed (<code>inventory</code>), what is being exploited in the wild (<code>threat</code>),
+and whether installed artifacts can be trusted (<code>trust</code>).</li>
+<li>Combines public data — the National Vulnerability Database, MITRE, OSV, the
+GitHub Advisory Database, the CISA Known Exploited Vulnerabilities list and
+vendor advisories for Ubuntu, Debian and Apple — with evidence you produce:
+a Software Bill of Materials, a configuration snapshot, a socket capture,
+signatures, and vendor package lists.</li>
+<li>Reports <code>UNKNOWN</code> for any dimension with no evidence, and marks the overall
+result incomplete while any dimension is unknown.</li>
+<li>Stamps every verdict with the observer that produced it and the time, stores
+that provenance, and can mark a source's verdicts as distrusted retroactively
+without deleting the history of what you once believed.</li>
+<li>Builds and signs a sharded defect catalog, published as a signed manifest
+that a consumer can verify by signature and then by shard hash before
+importing it.</li>
+<li>Registers nine observers behind one uniform contract — <code>nvd</code>,
+<code>ubuntu_tracker</code>, <code>debian_tracker</code>, <code>apple_advisory</code>, <code>cyclonedx_sbom</code>,
+<code>cis_checker</code>, <code>local_exposure</code>, <code>kev</code> and <code>sigverify</code> — so a new source is
+one module rather than an engine change.</li>
+<li>Ships a trust policy as versioned, dated YAML, a public-infrastructure event
+ledger for upstream source reliability, and a command line interface with
+catalog ingestion, export, import, purge, audit, distrust and health
+subcommands.</li>
+</ul>
+
+<h2>t it does not do</h2>
+<p>These limits are in the project's own README and they are the credibility
+asset. They belong in the post.</p>
+<ul>
+<li>It does not scan your machine. posture is device-agnostic: you represent a
+device as a small YAML file and point posture at evidence you gather.</li>
+<li>It does not turn a clean result into a claim of safety. The map is not the
+territory, and a clean dimension means the map places nothing there.</li>
+<li>It does not convert missing evidence into a pass. A dimension with no
+observer is loud <code>UNKNOWN</code>, and the overall result stays incomplete.</li>
+<li>It does not cover unreported bugs, software with no Common Platform
+Enumeration identifier, or firmware the National Vulnerability Database
+never scored. Those have no map coordinates.</li>
+<li>It is not on the Python Package Index. It is source-installable only, and it
+is experimental at version 0.1.0, with no API stability guarantee. The
+programmatic interfaces may change.</li>
+<li>It does not send device data unless you ask it to. Only the <code>--live</code> path
+queries the National Vulnerability Database, and it sends the device's
+software identifier. Offline and catalog assessment send nothing.</li>
+<li>It does not yet wire the whole catalog into local assessment. Today only the
+Apple fix-version overlay from the imported catalog flows into a live
+assessment; the rest is browsable library data.</li>
+<li>It does not have a working credentialed lane. The commercial-source path is
+scaffolded in continuous integration but dormant: no credentialed observers
+are wired and no credentialed-only records exist.</li>
+<li>It does not promise a stable set of dimensions. Six default axes ship today,
+and the axes are vocabulary held as data, so the set can change.</li>
+</ul>
+
+<h2>of artifact to capture</h2>
+<p>The <code>posture demo</code> terminal card. It is the strongest single image in the
+project because it shows the honesty rule rather than describing it: a header
+line with the device and policy version, an <code>overall: incomplete (axis(es) unknown)</code> headline, one populated <code>vulnerability</code> axis with four verdicts
+stamped <code>decided by nvd</code>, four loud <code>UNKNOWN</code> axes each carrying the line
+<code>GAP: no observer produced any signal (axis blank — not 'clean')</code>, and the
+mandatory National Vulnerability Database attribution footer.</p>
+<p>Capture it at the full terminal width, in a monospaced face, with no window
+decoration around it. If a second image is needed, use the populated
+<code>posture assess full_device.yaml</code> card, which shows a <code>configuration</code> axis with
+twenty <code>cis_checker</code> verdicts, an <code>exposure</code> axis with a socket capture, and an
+<code>inventory</code> axis reading a Software Bill of Materials.</p>
+
+<h2>tall, in one line</h2>
+<pre><code class="language-bash">git clone https://github.com/rohankhanna/posture.git &amp;&amp; cd posture &amp;&amp; python -m pip install -e .
+</code></pre>
+<p>Python 3.11 or newer is required, and the runtime dependencies are installed
+with the package. <code>git</code> and <code>curl</code> are needed only for network ingestion and
+live assessment, not for the offline demonstration.</p>
+
+<h2>re to post, in order</h2>
+<ol>
+<li><strong>Hacker News, as a show</strong> — the reader there is looking for a tool they
+could not have found otherwise and for a design argument they can disagree
+with. The <code>UNKNOWN</code>-not-clean rule and the map-and-territory framing are
+exactly the kind of premise that survives the first comment thread. Post
+the terminal card in the text.</li>
+<li><strong>Lobsters</strong> — the reader there wants the mechanism, not the outcome: the
+observer contract, the policy order, the signed catalog, the shard hash
+verification. A short, technical, low-announcement entry lands better here
+than a launch post.</li>
+<li><strong>r/sysadmin</strong> — the reader is an infrastructure operator who has been
+burned by a scanner reporting zero findings. Lead with the missing-evidence
+problem and with the fact that posture does not touch the machine, which is
+the part that makes it usable on an air-gapped or customer-held host.</li>
+<li><strong>r/cybersecurity</strong> — the reader wants the threat model and the provenance
+model: who produced each verdict, how a source is distrusted retroactively,
+and what the trust policy is. The <code>distrust</code> and <code>audit</code> commands are the
+conversation there.</li>
+<li><strong>Dev.to, or a long-form post on your own site</strong> — the reader wants the
+argument in prose: why <code>UNKNOWN</code> is a result and not an error, and why the
+map-and-territory distinction changes what a fleet view can claim. This is
+also the surface that keeps working after the day is over.</li>
+<li><strong>Curated list and directory surfaces</strong> — the awesome lists that collect
+vulnerability scanners, Software Bill of Materials tooling and supply-chain
+security tools, and the software directories that index command line tools
+by language and licence. An entry in a collection that a reader already
+browses is a permanent recommendation rather than a spike of traffic that
+decays within a day.</li>
+</ol>
+
+<h2>three hardest questions</h2>
+<p><strong>&quot;A dimension with no observer reports <code>UNKNOWN</code>. That is the same as
+reporting nothing, with extra steps.&quot;</strong>
+No — <code>UNKNOWN</code> is a result, not an absence of one. The demonstration deliberately
+shows four of six dimensions coming back <code>UNKNOWN</code> while the fifth returns four
+concrete verdicts, and the overall headline stays <code>incomplete</code> until every
+dimension has an observer. The point of the tool is that it refuses to convert
+absence of evidence into evidence of absence, which is precisely what a
+scanner that reports zero findings does. posture is also not a collector: it
+assesses the evidence you supply, so what stays unknown is always traceable to
+a specific input you did not provide.</p>
+<p><strong>&quot;Your demonstration shows CVE-2026-99901. Where does the real data come
+from?&quot;</strong>
+The bundled default is a synthetic fixture, and the README says so plainly.
+There are two real paths. The <code>--live</code> flag queries the National Vulnerability
+Database directly and is the only path that sends anything to a third party,
+in this case the device's software identifier as the <code>virtualMatchString</code>
+parameter. The other is the signed catalog: continuous integration builds and
+signs it every six hours, you verify the manifest signature and then the
+shard hashes, and you import it. The honest caveat, which belongs in the
+answer, is that only the Apple fix-version overlay from the imported catalog
+currently reaches a live assessment; the National Vulnerability Database
+observer has no catalog path yet, and wiring more of it is ongoing work.</p>
+<p><strong>&quot;This is a viewer for data other people collected. Where is the
+engineering?&quot;</strong>
+The engineering is in the parts that are not the data: the uniform observer
+contract that makes a new source one module; the policy order in which a
+vendor observer overrides the National Vulnerability Database on the same
+Common Vulnerabilities and Exposures identifier; the provenance record on
+every verdict and the retroactive distrust that marks rather than deletes;
+the atomic publish path that guarantees a served catalog is the last verified
+snapshot or the new one and never a mixture; the bounded-growth purge that
+refuses to forget a known-exploited defect; and the command gate that fails
+loudly when the deployment script calls a command the package no longer
+ships.</p>
+
+<h2>e ready before posting</h2>
+<ul>
+<li>The <code>posture demo</code> terminal card as an image, and a short screen recording
+that runs <code>posture demo</code> and then <code>posture assess full_device.yaml</code> so the
+change from loud unknowns to populated axes is visible in one clip.</li>
+<li>The &quot;what it does not do&quot; list, printed, because the first comment thread
+will ask about the limits and the answers should be exact.</li>
+<li>The signed-catalog verification trace: <code>posture spine verify</code> with the
+signature check and the shard hash check, so the trust story can be shown
+rather than asserted.</li>
+<li>The removal of the stale note in the project README saying the repository is
+private, since the copy goes out against a public repository and the
+sentence would be wrong on the day it is read.</li>
+<li>The demonstration device YAML and its fixtures, so anyone who asks for a
+reproducible run gets the same bytes.</li>
+<li>A one-line statement of the licence and the current version, and an explicit
+note that the project is experimental, source-installable only, and carries
+no API stability guarantee.</li>
+</ul>
+
+<footer>Built from the same text as the launch copy. Sources and status are on GitHub.</footer>
+</main>
+</body>
+</html>

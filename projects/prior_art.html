@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>prior_art — Rohan Khanna</title>
+<meta name="description" content="Install a required research step into a repository, and fail when the evidence is missing.">
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+<header>
+  <nav><a href="../index.html">All projects</a><a href="https://github.com/rohankhanna">GitHub</a></nav>
+</header>
+<h1>prior_art</h1>
+<p class="lede">Install a required research step into a repository, and fail when the evidence is missing.</p>
+<p><a href="https://github.com/rohankhanna/prior_art">Repository on GitHub</a></p>
+<h2>The problem</h2>
+<p>Before an assistant writes anything in a repository, the most valuable
+question is whether something already does this and should be used instead
+of built. In practice that question gets skipped, because skipping it is
+free and asking it costs minutes. The bill for skipping it arrives later, as
+a rewrite.</p>
+<p>A repository that wants the question asked every time needs a rule that
+survives the session, lives with the code, and cannot be quietly ignored.
+That means a file in the repository, checked by something, not a habit and
+not a setting in a tool that may be turned off.</p>
+
+<h2>cares</h2>
+<p>Two projects sit close to it, and a reader will meet them first.</p>
+<ul>
+<li>The lead project on the GitHub topic page for prior art search is described
+as &quot;Prior-art exploration for your own software project: MCP server + Agent
+Skill that find related patents and report observations, never a verdict&quot;
+(https://github.com/topics/prior-art-search). The findings do not give that
+project's own name or repository address, so its name could not be
+confirmed.</li>
+<li><strong>five0nit/brief2ship</strong> — &quot;Search and score local code, GitHub, PyPI, npm,
+crates.io, and Hugging Face before building—then ship with proof&quot;
+(https://github.com/topics/repository-discovery).</li>
+</ul>
+<p>Both are model-prompted skills: the research step is a prompt the model may
+follow, per session, and nothing checks that it happened. This project is a
+requirement installed in the repository, with a fail-closed checker and dated
+evidence.</p>
+<ul>
+<li>Maintainers who work with assistants heavily and have already paid for a
+rebuild that an existing tool could have covered. They gather on Hacker
+News, in r/ExperiencedDevs, and in r/programming.</li>
+<li>People who have watched an assistant confidently reinvent something that
+already existed.</li>
+<li>Teams that tried to enforce this by convention and watched the convention
+erode within a month.</li>
+<li>Anyone who wants the question asked at the point where it is cheapest to
+answer, which is before the change is written rather than after.</li>
+</ul>
+
+<h2>t it does</h2>
+<p><code>prior_art</code> is a single command-line tool. One install step places it on the
+path; from there the <code>apply</code> and <code>check</code> subcommands operate on the current
+directory by default, or on an absolute repository path.</p>
+<ul>
+<li>It installs a required research step into the repository's agent
+instruction file, <code>AGENTS.md</code>, and keeps <code>CLAUDE.md</code>, <code>GEMINI.md</code> and
+<code>HERMES.md</code> as exact replicas of it.</li>
+<li>The installed section requires, before substantive work, that a daily
+research gate is satisfied.</li>
+<li>The gate has two levels: a product-level scan asking whether existing
+tools already satisfy the intent, and a work-slice scan asking whether
+the specific change in front of the operator is already solved.</li>
+<li>Evidence is one file per local calendar day, named for that date. A
+refreshed product scan has to cite at least one external address.</li>
+<li>Freshness is expressed as a speed class: <code>tectonic</code>, <code>snail</code>, <code>walking</code>,
+<code>fast</code>, <code>rapid</code> or <code>lightspeed</code>, each with its own interval.</li>
+<li>Slices are typed: <code>mechanical</code>, which carries the minimal fields, and
+<code>capability</code>, which carries the full build-versus-buy set and requires
+differentiation when the action is to build.</li>
+<li>The posture is written into the contract: prefer adopt, integrate, extend,
+contribute, narrow the scope, wait, or stop over building.</li>
+<li>Sensitive material is not allowed in the evidence file; the contract
+requires redaction instead.</li>
+<li>The checker is fail-closed. If the evidence for the day is missing or
+malformed, it refuses rather than passes.</li>
+<li><code>apply</code> is idempotent. It creates or refreshes its own section in
+<code>AGENTS.md</code> without disturbing adjacent sections installed by other tools,
+installs the gate contract and the checker script into the repository, and
+regenerates the three mirror files.</li>
+<li><code>help</code> prints the usage.</li>
+</ul>
+<p>The tool does not perform the research itself. It requires the research and
+checks that the evidence exists.</p>
+
+<h2>t it does not do</h2>
+<ul>
+<li>It does not do the research. It requires it and checks for the evidence.</li>
+<li>It does not judge the quality of the research. It checks the shape of the
+evidence: a named scan, a date, a speed class, a typed slice, and an
+external citation when a scan is refreshed.</li>
+<li>It does not stop an assistant from ignoring the instruction. It makes
+ignoring it visible, because the checker fails and the failure is visible.</li>
+<li>It does not replace judgment on whether to build. It records the decision
+and the alternatives considered, so the decision is visible later.</li>
+<li>It does not run a model. It is a shell tool that reads a file and checks
+its structure.</li>
+<li>It does not search the internet for you. The external citation in the
+evidence file is written by the person doing the work.</li>
+</ul>
+
+<h2>of artifact to capture</h2>
+<p>A terminal card showing the checker refusing to pass in a repository where
+the day's evidence file is missing, with the non-zero exit visible, followed
+by the same check passing once the evidence file exists. The refusal is the
+artifact: a checker that only ever succeeds would be a different and much
+weaker tool.</p>
+
+<h2>tall, in one line</h2>
+<pre><code class="language-bash">git clone https://github.com/rohankhanna/prior_art.git
+cd prior_art
+./prior-art install
+</code></pre>
+<p>The installer links the command into <code>~/.local/bin</code>, so that directory has
+to be on the path. Once installed, the tool has three subcommands: <code>apply</code>,
+which installs the section, the contract and the checker into the repository
+you run it from; <code>check</code>, which validates the daily gate for that
+repository; and <code>help</code>, which prints the usage. Both <code>apply</code> and <code>check</code>
+also accept an absolute repository path instead of defaulting to the
+current directory.</p>
+
+<h2>re to post, in order</h2>
+<ol>
+<li><strong>Hacker News, as a show</strong> — the argument belongs in the first comment:
+what was rebuilt before the rule existed, and what the rule would have
+stopped. The tool is the mechanism for a position that should travel on
+its own.</li>
+<li><strong>r/ExperiencedDevs</strong> — the strongest audience for the debate about
+whether this is engineering or bureaucracy, because the people who would
+enforce it are the people who would have to live with it.</li>
+<li><strong>r/programming</strong> — for the broader argument about a required research
+step, and for the concrete story of a rebuild the rule would have
+prevented.</li>
+<li><strong>Dev.to</strong> — a long-form post on the cost of skipping the research
+question, with the tool at the end as the mechanism rather than the
+subject.</li>
+<li><strong>r/opensource</strong> — with the link, the argument, and only once the
+repository reads as a project. That community wants the reasoning
+attached to the code.</li>
+<li><strong>Distribution surfaces</strong> — the GitHub topic pages for command-line
+developer tools, an entry in a curated list of command-line tools, and a
+Python developer tools directory listing. These are permanent and keep working
+after the discussion threads have scrolled away.</li>
+</ol>
+<p>Lobsters is not in this list: it rules out self-help and personal-productivity
+topics, and a self-imposed daily research gate sits close to that line.</p>
+
+<h2>three hardest questions</h2>
+<p><strong>&quot;Isn't the checker just theatre? It verifies the shape of a document, not
+the quality of the research.&quot;</strong>
+Correct, and it is deliberately shaped that way. A checker that tried to
+judge research quality would either need a large model call on every change
+or settle for a rule nobody can falsify. This one checks that a named scan
+happened on a named day, with a speed class that says how fresh it has to
+be, a typed slice, and at least one external citation when a scan is
+refreshed. It refuses the file when that is not true. It verifies the
+record, and it refuses to guess about the judgment.</p>
+<p><strong>&quot;This is just a prompt with extra steps. Why does it need a tool?&quot;</strong>
+Because the nearest neighbours are prompts too: the lead project on the prior
+art search topic page, &quot;MCP server + Agent Skill that find related patents and
+report observations, never a verdict&quot;
+(https://github.com/topics/prior-art-search), whose own name the findings do
+not give, and <strong>five0nit/brief2ship</strong>, &quot;Search and score local code, GitHub,
+PyPI, npm, crates.io, and Hugging Face before building—then ship with proof&quot;
+(https://github.com/topics/repository-discovery). Both are model-prompted
+skills, so both depend on the model choosing to run them.</p>
+<p>Because a prompt lives in a session and a file lives in the repository. The
+tool's contribution is that the requirement is checked mechanically, on a
+schedule, by something that cannot be satisfied by asserting that the
+research was done. The evidence is a dated file with a shape, and the
+checker fails closed when it is absent.</p>
+<p><strong>&quot;Requiring this on every change would slow everything down.&quot;</strong>
+On small mechanical changes it would, if the rule had only one level. It has
+two: the product-level scan can be reused while it is still within the
+interval its speed class allows, and the work-slice record for a mechanical
+change carries the minimal fields. So the recurring cost is a freshness
+decision rather than a full research pass, and the intervals are set by the
+project rather than fixed by the tool.</p>
+
+<h2>e ready before posting</h2>
+<ul>
+<li>The terminal card showing the checker refusing to pass with no evidence
+file, then passing with one.</li>
+<li>A short account of a specific rebuild the rule would have prevented. One
+concrete story is worth more than the general argument.</li>
+<li>The contract file, because the most common objection will be about what
+the evidence is allowed to contain, and the answer is written down.</li>
+<li>The list of speed classes and slice kinds, so the vocabulary can be
+argued with rather than guessed at.</li>
+</ul>
+
+<footer>Built from the same text as the launch copy. Sources and status are on GitHub.</footer>
+</main>
+</body>
+</html>

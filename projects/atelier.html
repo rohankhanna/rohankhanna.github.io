@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>atelier — Rohan Khanna</title>
+<meta name="description" content="atelier keeps provider credentials in a password store and hands tools stand-ins instead.">
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+<header>
+  <nav><a href="../index.html">All projects</a><a href="https://github.com/rohankhanna">GitHub</a></nav>
+</header>
+<h1>atelier</h1>
+<p class="lede">atelier keeps provider credentials in a password store and hands tools stand-ins instead.</p>
+<p><a href="https://github.com/rohankhanna/atelier">Repository on GitHub</a></p>
+<h2>The problem</h2>
+<p>Any tool that calls a hosted model provider needs that provider's credential.
+The credential then ends up in the tool's environment, in its configuration
+file, in shell history, in the process table, and in every error handler that
+dumps the environment. This is true of small scripts and true of agents that
+run unattended for hours.</p>
+<p>The usual answers assume the tool and the person are one trust domain. They
+are not. The tool is a program that runs without supervision; the person is
+the one whose credential it is. A client that can read its own credential can
+also log it, ship it in a crash report, pass it to a subprocess, and write it
+to a log line nobody read for six months.</p>
+<p>The second problem is subtler and it is the one that shapes the project. If
+the operator can read every credential, then the operator is another holder of
+the secret, and so is every place the operator might paste it. Making the
+operator unable to read credentials back removes an entire class of exposure,
+at the cost of a strange administrative model: you can replace a credential
+but you cannot look at it.</p>
+
+<h2>cares</h2>
+<p>The category is already populated. Four projects broker credentials for
+agents and have been announced to the same audience:</p>
+<ul>
+<li><strong>Infisical Agent Vault</strong> (https://github.com/Infisical/agent-vault) —
+&quot;A HTTP credential proxy and vault for AI agents like Claude Code, OpenClaw,
+Hermes, custom agents + harnesses, and more&quot;</li>
+<li><strong>AgentSecrets</strong> (https://news.ycombinator.com/item?id=47167691) —
+&quot;Zero-Knowledge Credential Proxy for AI Agents&quot;</li>
+<li><strong>Authsome</strong> (https://news.ycombinator.com/item?id=47936190) — &quot;open-source
+local auth proxy for AI agents&quot;</li>
+<li><strong>MCP-warden</strong> (https://news.ycombinator.com/item?id=50241410) — &quot;local
+credential broker so AI agents never see your secrets&quot;</li>
+</ul>
+<p>What the scan did not find in any of them is atelier's specific boundary: the
+operator cannot read a credential back, the store is a password store held by
+a dedicated service identity with its own key, and there is no control plane
+to run.</p>
+<ul>
+<li><strong>People running local tooling against hosted model providers</strong> who have
+thought about where the key sits and did not like the answer. They gather on
+Hacker News, on <code>r/LocalLLaMA</code>, and in the Python and agent-tooling
+communities on Dev.to.</li>
+<li><strong>Operators who rotate credentials</strong> and would rather not handle rotated
+material by hand, and who would rather their tooling never held the
+original. They gather on Lobsters and in infrastructure forums.</li>
+<li><strong>Security-minded developers and platform engineers</strong> who enjoy an unusual
+isolation boundary and want to argue about whether it is the right one.
+They gather on Hacker News, on Lobsters, and on <code>r/cybersecurity</code>.</li>
+<li><strong>Maintainers of local-first and self-hosted tools</strong> who want a credential
+boundary they can ship without running a control plane. They gather on
+<code>r/selfhosted</code> and in the password-store and secrets-management
+communities.</li>
+</ul>
+
+<h2>t it does</h2>
+<ul>
+<li>Stores durable provider credentials — OAuth refresh tokens, token bundles,
+revocable provider API keys and, where a provider exposes usage only through
+a browser session, a copy of the browser's session cookies — encrypted in a
+<code>pass</code> password store.</li>
+<li>Runs as a dedicated system user, <code>atelier</code>, with its own GPG key and its own
+password store, so that only the atelier service process holds the
+decryption capability.</li>
+<li>Refreshes provider credentials when an access token is stale and writes the
+rotated refresh material back into the store.</li>
+<li>Mints local stand-in tokens carrying a token identifier, an audience, a
+scope, an account, issue and expiry times, and a revocation state. The token
+secret is shown once to the trusted local client; only a hash is stored.</li>
+<li>Validates the audience, scope, expiry and revocation of a stand-in token on
+every request, with least-privilege scopes that keep upstream proxying and
+usage reading apart.</li>
+<li>Injects the provider credential only inside the final upstream HTTP request,
+and never returns a provider access token, a provider API key, a refresh
+token, the full authentication JSON or a decrypted store entry to a client.</li>
+<li>Gives the operator write-only commands — <code>atelier load put</code>, <code>rm</code>, <code>mv</code> and
+<code>cp</code> — delegating to a restricted wrapper that permits insertion, removal,
+moving and copying and never <code>show</code> or <code>edit</code>.</li>
+<li>Ships a documented integration contract, an architecture document with
+diagrams, and decision records for the password-store choice and for the
+operator-isolated custody decision.</li>
+</ul>
+
+<h2>t it does not do</h2>
+<ul>
+<li>It is not a general secrets platform, a model router, a prompt transformer
+or an agent launcher. The project's own status section says exactly this.</li>
+<li>The operator cannot read a credential back. The operator can write, delete,
+move and copy, and that is the whole administrative surface.</li>
+<li>Client tools cannot decrypt anything. They receive a stand-in token, which
+is local-only, scoped, short-lived and revocable.</li>
+<li>It does not own model selection, prompt routing, payload transformation,
+provider account login or client process launch. Those belong to the client.</li>
+<li>It does not custody a provider's own command line sign-in credentials. Where
+it holds a copy of browser session cookies, the browser still owns them,
+the copy is session-scoped with no refresh flow, and rotation is an
+operator-run re-extraction.</li>
+<li>It does not have a refresh flow for provider API keys. Rotation is the
+operator replacing the store entry, and the key is reloaded on the next
+request.</li>
+<li>It is an early implementation with a narrow public surface, and it depends
+on a password store, a dedicated service identity with a GPG key, a
+restricted sudoers rule and a service installation step. That operational
+cost is the price of the isolation boundary, and it should be stated rather
+than hidden.</li>
+<li>It does not store credentials for you. You load them.</li>
+</ul>
+
+<h2>of artifact to capture</h2>
+<p>The operator-isolation table as a single image, with three rows and one
+question per row:</p>
+<table>
+<thead>
+<tr>
+<th>Identity</th>
+<th>Can decrypt credentials?</th>
+<th>How it accesses them</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Atelier service user</td>
+<td>Yes — owns the GPG key</td>
+<td>Direct <code>pass show</code> at runtime</td>
+</tr>
+<tr>
+<td>Client tools</td>
+<td>No</td>
+<td>HTTP proxy with stand-in tokens</td>
+</tr>
+<tr>
+<td>Operator</td>
+<td>No</td>
+<td>Write-only via <code>atelier load</code> subcommands</td>
+</tr>
+</tbody>
+</table>
+<p>It carries the entire design in one frame: three identities, one question,
+three different answers, and the surprising one is the person at the bottom.</p>
+<p>The second artifact is a terminal pair: a successful <code>atelier load put</code> of a
+credential, followed by an attempt to read it back that is refused by the
+restricted wrapper. Capture both halves in one image so the asymmetry is
+visible without narration.</p>
+
+<h2>tall, in one line</h2>
+<pre><code class="language-bash">sudo deploy/systemd/install.sh &amp;&amp; sudo systemctl enable --now atelier.service
+</code></pre>
+<p>That builds the package as a wheel, creates a virtual environment for the
+<code>atelier</code> service user, renders the systemd unit, and starts the service.
+Verify it with:</p>
+<pre><code class="language-bash">curl -fsS http://127.0.0.1:7342/health
+</code></pre>
+<p>The password store, the GPG key for the service user, the restricted wrapper
+and the sudoers rule are prerequisites, documented alongside the installer.</p>
+
+<h2>re to post, in order</h2>
+<ol>
+<li><strong>Lobsters</strong> — the reader there wants the design decision, not the feature
+list, and will want to argue about whether removing operator read access is
+correct. The decision record and the isolation table are the submission.</li>
+<li><strong>Hacker News, as a show</strong> — the reader wants to know whether the boundary
+is real, and will test the claim in the comments. The question to put to
+them is whether an operator who cannot read their own credential is
+protected or merely inconvenienced.</li>
+<li><strong>r/LocalLLaMA</strong> — the reader is running tooling against hosted providers
+from their own machine and wants to know what actually holds their key.
+This is where the stand-in token pattern lands with people who feel the
+problem daily.</li>
+<li><strong>r/selfhosted</strong> — the reader wants a component that runs on their own
+machine with no control plane, and a service with a small, readable surface
+fits that. The strict self-promotion rules there mean the post must lead
+with the problem, not with the release.</li>
+<li><strong>Dev.to, or a long-form post on your own site</strong> — the reader wants the
+argument in prose: why the operator loses read access, what a stand-in
+token does and does not protect against, and how rotation works when you
+cannot look at what you are rotating.</li>
+<li><strong>The password-store, secrets-management and local-first directories and
+curated lists</strong> — the reader is scanning for the category, not for your
+project. An entry that says precisely what the tool is, and the one
+sentence about what it is not, will be read; an entry that says &quot;secure
+credential management for AI&quot; will not.</li>
+</ol>
+
+<h2>three hardest questions</h2>
+<p><strong>&quot;If the operator cannot read the credential, how do they know it is
+correct, and how do they rotate it?&quot;</strong>
+Rotation is by replacement, not by inspection. The operator writes the new
+material over the old entry with <code>atelier load put</code>, deletes it with
+<code>atelier load rm</code>, and moves or copies it with <code>mv</code> and <code>cp</code>. For OAuth
+bundles, the service itself refreshes the access token and writes the rotated
+refresh material back into the store, so the operator never handles it. For
+provider API keys there is no refresh flow at all, by design: the key is
+revocable, non-expiring, and rotation is the operator replacing the entry,
+after which the key is reloaded on the next request. The honest cost of this
+model is that you cannot eyeball what you have configured, and that is a real
+price, not a rhetorical flourish.</p>
+<p><strong>&quot;Isn't this just a secrets manager with extra steps? Why not use the one
+you already run?&quot;</strong>
+The credential-proxy category is already occupied, and the four closest
+projects say so themselves:</p>
+<ul>
+<li><strong>Infisical Agent Vault</strong> (https://github.com/Infisical/agent-vault) —
+&quot;A HTTP credential proxy and vault for AI agents like Claude Code, OpenClaw,
+Hermes, custom agents + harnesses, and more&quot;</li>
+<li><strong>AgentSecrets</strong> (https://news.ycombinator.com/item?id=47167691) —
+&quot;Zero-Knowledge Credential Proxy for AI Agents&quot;</li>
+<li><strong>Authsome</strong> (https://news.ycombinator.com/item?id=47936190) — &quot;open-source
+local auth proxy for AI agents&quot;</li>
+<li><strong>MCP-warden</strong> (https://news.ycombinator.com/item?id=50241410) — &quot;local
+credential broker so AI agents never see your secrets&quot;</li>
+</ul>
+<p>None of those four has the boundary atelier has. The difference is three
+things: the operator cannot read a credential back, the store is a password
+store held by a dedicated service identity with its own key, and there is no
+control plane to run.</p>
+<p>Beyond that, by its own status section, atelier is not a secrets platform and
+does not try to be one. A hosted secrets manager still has to hand the credential to the
+workload, and the workload then holds it in memory, in the environment, and in
+whatever it writes to a log. atelier gives the client a stand-in token that is
+not valid at the provider, and the real credential is injected only inside the
+final upstream request. The other difference is the direction of the trust
+boundary: it deliberately takes away the operator's ability to read the
+secret back, which most tools will not do.</p>
+<p><strong>&quot;How do I know the proxy is not itself logging or leaking the
+credential?&quot;</strong>
+Read the implementation, and the integration contract says in advance what is
+forbidden. atelier must not return a provider access token, a provider API
+key, a refresh token, the full authentication JSON or decrypted store
+contents to any client. Stand-in token secrets are shown once and only a hash
+is stored. There are explicit redaction and non-disclosure rules for
+credential-bearing errors, and the scopes are least-privilege and distinct, so
+a client that only reads usage meters does not hold the upstream-proxying
+scope and a proxy client does not implicitly gain usage reading. The
+dependency worth naming is that the isolation depends on the store being
+decryptable only by the service user's GPG key; if that key is readable by
+the operator, the boundary is gone.</p>
+
+<h2>e ready before posting</h2>
+<ul>
+<li>The operator-isolation table as an image, and the paired terminal capture of
+a successful write followed by a refused read.</li>
+<li>The decision record for the operator-isolated custody decision, because
+&quot;why the operator cannot read it back&quot; is a decision and should be presented
+as one rather than as a feature.</li>
+<li>A written list of what is not finished yet. Saying it first prevents someone
+else from saying it first, and the audience for an early isolation boundary
+is exactly the audience that will find the gaps.</li>
+<li>The prerequisites, stated plainly: the password store, the dedicated system
+user, the GPG key, the restricted wrapper, the sudoers rule. Readers
+considering this at home need to know the cost before they start.</li>
+<li>The integration contract, because it is the document that makes the
+non-disclosure claims checkable rather than promised.</li>
+<li>A clear statement of the licence and the current version, and the words
+&quot;early implementation&quot; somewhere in the first paragraph of every
+submission.</li>
+</ul>
+
+<footer>Built from the same text as the launch copy. Sources and status are on GitHub.</footer>
+</main>
+</body>
+</html>
